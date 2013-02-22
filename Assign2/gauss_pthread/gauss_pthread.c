@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
   /* Gaussian Elimination using pthread*/
   int i;
   for(i=0; i<NUM_THREADS; i++){
-	pthread_create(&threads[i], NULL, gauss, (void *)i);	
+	pthread_create(&threads[i], NULL, gauss, (void *)(long)i);	
   }
   
   for(i=0; i<NUM_THREADS; i++)
@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
 
 void *gauss(void *pID) {
   int col, myrow; 
-  int thread_id = (int) pID; /*get the thread id*/
+  int thread_id = (int)(long)pID; /*get the thread id*/
   int start, end;
   
   float multiplier;
@@ -214,7 +214,9 @@ void *gauss(void *pID) {
   /* Define a static way to parallelize the Gaussian elimination.
    * start represents the start of the static chunk, end represents the end of the static chunk.
    * As for min(), it is used to limit the end to N, else if N-norm-1 cann't 
-   * be ecact divided by NUM_THREADS, the end may be larger than N, which causes core dumped.
+   * be exact divided by NUM_THREADS, the end may be larger than N, which causes core dumped.
+   * Since start, end, myrow is related to thread_id, and norm is synchronized,
+   * the values in each thread won't be intersected.
    */
   while (norm < N-1) {
     start = norm + 1 + thread_id*((N-norm-1)/NUM_THREADS+1);
@@ -246,7 +248,8 @@ void back_substitution(){
 }
 
 /* Define a barrier to synchronize the thread. 
- * After NUM_THREADS threads have finished, increase norm by 1
+ * When a thread is finished, count--, when count==0, it means all the threads have finished
+ * And after NUM_THREADS threads have finished, increase norm by 1
  */
 void barrier(int *norm){
   pthread_mutex_lock(&count_lock);

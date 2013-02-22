@@ -141,7 +141,6 @@ int main(int argc, char **argv) {
   gettimeofday(&etstart, &tzdummy);
   etstart2 = times(&cputstart);
 
-  //omp_set_num_threads(8);
   /* Gaussian Elimination */
   gauss();
 
@@ -193,10 +192,15 @@ void gauss() {
 			* element row and col */
   float multiplier;
 
-  //printf("Computing Serially.\n");
   /* Gaussian elimination */
+  /* Since the inner two loops depends on the norm loop, we cann't parallel the norm loop
+   * because of the data dependence, I parallel the row loop using omp parallel for,
+   * and since each parallel thread has its own row col and multiplier, these values should be private.
+   * I tried several ways to schedule the parallel, static, dynamic and guided, it seems that guided can
+   * achieve the best performance.
+   */
   for (norm = 0; norm < N - 1; norm++) {  
-    #pragma omp parallel for private(row, col, multiplier) schedule(guided,4) num_threads(4)
+    #pragma omp parallel for private(row, col, multiplier) schedule(guided,4)
       for (row = norm+1; row < N; row++) {
         multiplier = A[row][norm] / A[norm][norm];
         for (col = norm; col < N; col++) {
@@ -206,10 +210,10 @@ void gauss() {
       }
   }
 }
-  /* (Diagonal elements are not normalized to 1.  This is treated in back
-   * substitution.)
-   */
-
+  
+/* (Diagonal elements are not normalized to 1.  This is treated in back
+ * substitution.)
+ */
 void back_substitution(){
   int row, col;
   /* Back substitution */
