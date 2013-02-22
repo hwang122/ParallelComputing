@@ -16,7 +16,7 @@
 #include <time.h>
 #include <pthread.h> //new added pthread head file
 
-#define NUM_THREADS 5 //define the number of threads
+#define NUM_THREADS 8 //define the number of threads
 #define min(a, b)	( a < b ) ? a : b //define a funtion to return a min value
 
 int count = NUM_THREADS-1;
@@ -154,8 +154,9 @@ int main(int argc, char **argv) {
   pthread_cond_init(&next, NULL);
   /* Gaussian Elimination using pthread*/
   int i;
-  for(i=0; i<NUM_THREADS; i++)
+  for(i=0; i<NUM_THREADS; i++){
 	pthread_create(&threads[i], NULL, gauss, (void *)i);	
+  }
   
   for(i=0; i<NUM_THREADS; i++)
 	pthread_join(threads[i], NULL);
@@ -203,22 +204,28 @@ int main(int argc, char **argv) {
  */
 
 void *gauss(void *pID) {
-  int col; 
-  int myrow = 0;
+  int col, myrow; 
   int thread_id = (int) pID; /*get the thread id*/
+  int start, end;
+  
   float multiplier;
 
-  //printf("Computing Parallelly.\n");
-  printf("1");
   /* Gaussian elimination */
-  while (norm < N - 1) {
-    for (myrow = thread_id*((N-norm-1)/NUM_THREADS+1); myrow < min(N, (thread_id+1)*((N-norm-1)/NUM_THREADS+1)); myrow++) {
-      multiplier = A[myrow][norm] / A[norm][norm];
-      for (col = norm; col < N; col++) {
-	A[myrow][col] -= A[norm][col] * multiplier;
+  /* Define a static way to parallelize the Gaussian elimination.
+   * start represents the start of the static chunk, end represents the end of the static chunk.
+   * As for min(), it is used to limit the end to N, else if N-norm-1 cann't 
+   * be ecact divided by NUM_THREADS, the end may be larger than N, which causes core dumped.
+   */
+  while (norm < N-1) {
+    start = norm + 1 + thread_id*((N-norm-1)/NUM_THREADS+1);
+    end = min(N, norm + 1 + (thread_id+1)*((N-norm-1)/NUM_THREADS+1));
+      for (myrow = start; myrow < end; myrow++) {
+        multiplier = A[myrow][norm] / A[norm][norm];
+        for (col = norm; col < N; col++) {
+	  A[myrow][col] -= A[norm][col] * multiplier;
+        }
+        B[myrow] -= B[norm] * multiplier;
       }
-      B[myrow] -= B[norm] * multiplier;
-    }
   barrier(&norm);
   }
 }
@@ -238,6 +245,9 @@ void back_substitution(){
   }
 }
 
+/* Define a barrier to synchronize the thread. 
+ * After NUM_THREADS threads have finished, increase norm by 1
+ */
 void barrier(int *norm){
   pthread_mutex_lock(&count_lock);
 
