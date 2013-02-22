@@ -19,8 +19,6 @@
 #define NUM_THREADS 5 //define the number of threads
 #define min(a, b)	( a < b ) ? a : b //define a funtion to return a min value
 
-pthread_t threads[NUM_THREADS];
-
 int count = NUM_THREADS-1;
 int norm = 0;
 pthread_cond_t next;
@@ -38,7 +36,7 @@ volatile float A[MAXN][MAXN], B[MAXN], X[MAXN];
 #define randm() 4|2[uid]&3
 
 /* Prototype */
-void gauss();  /* The function you will provide.
+void *gauss(void *);  /* The function you will provide.
 		* It is this routine that is timed.
 		* It is called only on the parent.
 		*/
@@ -151,13 +149,13 @@ int main(int argc, char **argv) {
   gettimeofday(&etstart, &tzdummy);
   etstart2 = times(&cputstart);
 
-
+  pthread_t threads[NUM_THREADS];
   pthread_mutex_init(&count_lock, NULL);
   pthread_cond_init(&next, NULL);
   /* Gaussian Elimination using pthread*/
   int i;
   for(i=0; i<NUM_THREADS; i++)
-	pthread_create(&threads[i], NULL, (void *)gauss, (void *)&i);	
+	pthread_create(&threads[i], NULL, gauss, (void *)i);	
   
   for(i=0; i<NUM_THREADS; i++)
 	pthread_join(threads[i], NULL);
@@ -204,10 +202,10 @@ int main(int argc, char **argv) {
  * defined in the beginning of this code.  X[] is initialized to zeros.
  */
 
-void gauss(void *pID) {
+void *gauss(void *pID) {
   int col; 
   int myrow = 0;
-  int thread_id = (int)pID; /*get the thread id*/
+  int thread_id = (int) pID; /*get the thread id*/
   float multiplier;
 
   //printf("Computing Parallelly.\n");
