@@ -16,7 +16,7 @@
 #include <time.h>
 #include <pthread.h> //new added pthread head file
 
-#define NUM_THREADS 4 //define the number of threads
+#define NUM_THREADS 2//define the number of threads
 #define min(a, b)	( a < b ) ? a : b //define a funtion to return a min value
 
 int count = NUM_THREADS-1; //count the number of threads to synchronize
