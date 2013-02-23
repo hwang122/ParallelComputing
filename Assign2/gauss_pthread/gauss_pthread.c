@@ -19,10 +19,10 @@
 #define NUM_THREADS 4 //define the number of threads
 #define min(a, b)	( a < b ) ? a : b //define a funtion to return a min value
 
-int count = NUM_THREADS-1;
-int norm = 0;
-pthread_cond_t next;
-pthread_mutex_t count_lock;
+int count = NUM_THREADS-1; //count the number of threads to synchronize
+int norm = 0;              //normalization row
+pthread_cond_t next;       //condition, while satisfied, threads can continue to be called
+pthread_mutex_t count_lock; //the lock for count
 
 /* Program Parameters */
 #define MAXN 2000  /* Max value of N */
