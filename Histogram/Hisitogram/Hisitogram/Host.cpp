@@ -213,7 +213,7 @@ int main(int argc, char* argv[]){
 	//set the binsize and workgroup size
 	//the size of it need to be computed local memory in device
 	binSize = 256;
-	groupSize = 16;
+	groupSize = 32;
 	subHistogramNum = (width *height)/(binSize * groupSize);
 
 	// allocate the memory for image data
@@ -281,7 +281,7 @@ int main(int argc, char* argv[]){
         return 1;
     }
 
-	//Create the buffer in deive
+	//Create the buffer in device
 	deviceImageBuffer = clCreateBuffer(context,  CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 
 		sizeof(cl_uchar) * width  * height, data,  0);
 
@@ -309,8 +309,8 @@ int main(int argc, char* argv[]){
 	/*
 	cl_ulong local_mem_size;
 	clGetDeviceInfo(device, CL_DEVICE_LOCAL_MEM_SIZE, sizeof(local_mem_size), &local_mem_size, NULL);
-	 */
-
+	cout<<local_mem_size<<endl;
+	*/
 	/*
 	 * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 	 *           compute the histogram in device             *
