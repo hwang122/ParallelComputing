@@ -42,7 +42,6 @@ main(int argc, char** argv){
     int p;              /* The number of processes   */
     int chunkSize = 0;  /*Define the size of sub matrix*/
     int i, j, k, l, m;  /*general variables*/
-    float temp;         /*used to store temp float value*/
     int row, col        /*row number and column number for the matrix*/
     MPI_Status  status;
 
