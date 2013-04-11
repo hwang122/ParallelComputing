@@ -5,7 +5,7 @@
 #include "mpi.h"
 
 /* Program Parameters */
-#define MAXN 1000  /* Max value of N */
+#define MAXN 8  /* Max value of N */
 /* A * X = B, solve for X */
 float A[MAXN][MAXN], B[MAXN], X[MAXN];
 
@@ -61,10 +61,11 @@ int main(int argc, char** argv){
     /*buffer Matrices and vectors */
     float buffer_A[MAXN][MAXN] = {0}, buffer_B[MAXN] = {0};
 
+    /*time start*/
+    start = MPI_Wtime();
     if(rank == 0){
         printf("Gaussian Elimination using MPI\nMatrix dimension = %d\n", MAXN);
-        /*time start*/
-        start = MPI_Wtime();
+
         /*In processor 0, initialize all the data*/
         initialize_inputs();
         /*set local A and local B for processor 0*/
@@ -77,20 +78,19 @@ int main(int argc, char** argv){
 
         /*distribute all the data to other processors*/
         for(i = chunkSize; i < MAXN; i++){
-            MPI_Send(&A[i][0], MAXN, MPI_FLOAT, i/chunkSize, i%chunkSize, MPI_COMM_WORLD);
+            MPI_Send(&A[i], MAXN, MPI_FLOAT, i/chunkSize, i%chunkSize, MPI_COMM_WORLD);
             MPI_Send(&B[i], 1, MPI_FLOAT, i/chunkSize, i%chunkSize, MPI_COMM_WORLD);
         }
     }
     else{
         /*other processors receive the data from processor 0, and store it in local_A and local_b*/
         for(i = 0; i < chunkSize; i++){
-            MPI_Recv(&local_A[i][0], MAXN, MPI_FLOAT, 0, i, MPI_COMM_WORLD, &status);
+            MPI_Recv(&local_A[i], MAXN, MPI_FLOAT, 0, i, MPI_COMM_WORLD, &status);
             MPI_Recv(&local_B[i], 1, MPI_FLOAT, 0, i, MPI_COMM_WORLD, &status);
         }
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    printf("Send finished.\n");
 
     /*Gaussian elimination without pivoting*/
     for(i = 0; i < chunkSize; i++){
@@ -98,13 +98,14 @@ int main(int argc, char** argv){
             /*the original row and col in Matrix A*/
             col = chunkSize*rank + i;
             row = col;
+
             /*for different rank, calculate its multiplier*/
-            if(rank = j){
+            if(rank == j){
                 for(k = col; k < MAXN; k++)
                     buffer_A[row][k] = local_A[i][k]/local_A[i][col];
                 buffer_B[row] = local_B[i]/local_A[i][col];
                 /*boardcast multiplier*/
-                MPI_Bcast(&buffer_A[row][col], MAXN - col, MPI_FLOAT, rank, MPI_COMM_WORLD);
+                MPI_Bcast(&buffer_A[row], MAXN , MPI_FLOAT, rank, MPI_COMM_WORLD);
                 MPI_Bcast(&buffer_B[row], 1, MPI_FLOAT, rank, MPI_COMM_WORLD);
             }
 
@@ -122,10 +123,9 @@ int main(int argc, char** argv){
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    printf("Gaussian elimination finished.\n");
 
     /*back substitution*/
-    for(i = chunkSize - 1; i >= 0; i--)
+    for(i = chunkSize - 1; i >= 0; i--){
         for(j = p - 1; j >= 0; j--){
             /*the original row in the Matrix A, B and X*/
 	    row = i * p + j;
@@ -141,15 +141,15 @@ int main(int argc, char** argv){
             }
             X[row] /= local_A[i][i];
         }
+    }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    printf("Back substitution finished.\n");
 
-    if(rank == 0){
-        /*time end*/
-        end = MPI_Wtime();
+    /*time end*/
+    end = MPI_Wtime();
+    if(rank == 0)
         printf("Total Running time for Gaussian Elimination using MPI is %f.\n", end - start);
-    }
+
 
     MPI_Finalize();
 
