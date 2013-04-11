@@ -61,10 +61,11 @@ int main(int argc, char** argv){
     /*buffer Matrices and vectors */
     float buffer_A[MAXN][MAXN] = {0}, buffer_B[MAXN] = {0};
 
-    /*time start*/
-    start = MPI_Wtime();
     if(rank == 0){
         printf("Gaussian Elimination using MPI\nMatrix dimension = %d\n", MAXN);
+
+	/*time start*/
+	start = MPI_Wtime();
 
         /*In processor 0, initialize all the data*/
         initialize_inputs();
@@ -145,10 +146,11 @@ int main(int argc, char** argv){
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    /*time end*/
-    end = MPI_Wtime();
-    if(rank == 0)
+    if(rank == 0){
+	/*time end*/
+    	end = MPI_Wtime();
         printf("Total Running time for Gaussian Elimination using MPI is %f.\n", end - start);
+    }
 
 
     MPI_Finalize();
