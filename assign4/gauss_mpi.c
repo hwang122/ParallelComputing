@@ -44,6 +44,7 @@ main(int argc, char** argv){
     int i, j, k, l, m;  /*general variables*/
     int row, col        /*row number and column number for the matrix*/
     MPI_Status  status;
+    double start, end;  /*used to calculate running time*/
 
     /*Initialize MPI*/
     MPI_Init(&argc, &argv);
@@ -63,6 +64,8 @@ main(int argc, char** argv){
     float loacl_A[chunkSize][MAXN], local_B[chunkSize];
 
     if(rank == 0){
+        /*time start*/
+        start = MPI_Wtime();
         /*In processor 0, initialize all the data*/
         initialize_inputs();
         /*set local A and local B for processor 0*/
@@ -137,6 +140,14 @@ main(int argc, char** argv){
             }
             X[row] /= local_A[i][i];
 		}
+
+
+
+    if(rank == 0){
+        /*time end*/
+        end = MPI_Wtime();
+        printf("Total Running time for Gaussian Elimination using MPI is %f.\n", end - start);
+    }
 
     MPI_Finalize();
 }
