@@ -59,7 +59,7 @@ int main(int argc, char** argv){
     /*local A and B for different processor*/
     float local_A[chunkSize][MAXN], local_B[chunkSize];
     /*buffer Matrices and vectors */
-    float buffer_A[MAXN][MAXN] = {0}, buffer_B[MAXN] = {0};    	
+    float buffer_A[MAXN][MAXN] = {0}, buffer_B[MAXN] = {0};
 
     if(rank == 0){
         printf("Gaussian Elimination using MPI\nMatrix dimension = %d\n", MAXN);
@@ -105,7 +105,7 @@ int main(int argc, char** argv){
                 buffer_B[row] = local_B[i]/local_A[i][col];
                 /*boardcast multiplier*/
                 MPI_Bcast(&buffer_A[row][col], MAXN - col, MPI_FLOAT, rank, MPI_COMM_WORLD);
-                MPI_Bcast(&buffer_B[row], MAXN - col, MPI_FLOAT, rank, MPI_COMM_WORLD);
+                MPI_Bcast(&buffer_B[row], 1, MPI_FLOAT, rank, MPI_COMM_WORLD);
             }
 
             /*for each chunk, doing gaussian elimination*/
@@ -115,7 +115,7 @@ int main(int argc, char** argv){
                 it can add chunkSize everytime*/
                 for(l = i; l < rank*chunkSize + k; l+=chunkSize){
                     for(m = 0; m < MAXN; m++)
-                        local_A[k][m] -= local_A[k][col]*buffer_A[l][m];
+                        local_A[k][m] -= local_A[k][l]*buffer_A[l][m];
                 local_B[k] -= local_B[k]*buffer_B[l];
                 }
         }
