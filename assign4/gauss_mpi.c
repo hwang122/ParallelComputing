@@ -43,6 +43,7 @@ int main(int argc, char** argv){
     int row, col;               /*row number and column number for the matrix*/
     MPI_Status  status;
     double start, end;          /*used to calculate running time*/
+    double time[3];
 
     /*Initialize MPI*/
     MPI_Init(&argc, &argv);
@@ -76,6 +77,10 @@ int main(int argc, char** argv){
         /*In processor 0, initialize all the data*/
         initialize_inputs();
 
+        /*time for initializing Matrix*/
+        time[0] = MPI_Wtime();
+        printf("Initialize the Matrix and Vector takes %f s.\n", time[0] - start);
+
         /*set local A and local B for processor 0*/
         for(i = 0; i < chunkSize; i++)
             for(j = 0; j < MAXN; j++)
@@ -99,7 +104,11 @@ int main(int argc, char** argv){
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-
+    /*The running time of distribuing data*/
+    if(rank == 0){
+        time[1] = MPI_Wtime();
+        printf("Distributing data to each processor takes %f s.\n", time[1] - time[0]);
+    }
     /*Gaussian elimination without pivoting*/
     for(i = 0; i < chunkSize; i++){
         /*the original row and col in Matrix A*/
@@ -129,6 +138,11 @@ int main(int argc, char** argv){
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
+    /*running time of gauss elimation*/
+    if(rank == 0){
+        time[2] = MPI_Wtime();
+        printf("Gaussian elimination takes %f s.\n", time[2] - time[1]);
+    }
 
     /*back substitution*/
     for(i = chunkSize - 1; i >= 0; i--){
@@ -153,7 +167,10 @@ int main(int argc, char** argv){
     if(rank == 0){
         /*time end*/
     	end = MPI_Wtime();
-        printf("Total Running time for Gaussian Elimination using MPI is %f.\n", end - start);
+    	/*running time of back substitution*/
+    	printf("Back substitution takes %f s.\n", end - time[2]);
+    	/*total runing time*/
+        printf("Total Running time of this program is %f s.\n", end - start);
     }
 
 
