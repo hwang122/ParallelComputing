@@ -66,8 +66,8 @@ main(int argc, char** argv) {
 
     int         source;    /* Process sending integral  */
 
-    int         dest = 0;  /* All messages go to this dest, 
-			   the dest will be modify to p - 1 later  */
+    int         dest = 0;  /* All messages go to this dest,
+                            the dest will be modify to p - 1 later  */
 
     int         tag = 0;
 
@@ -98,8 +98,6 @@ main(int argc, char** argv) {
     Get_data(&a, &b, &n, my_rank, p);
 
 
-    dest = p - 1;   /*modify dest to the largest processor*/
-
     h = (b-a)/n;    /* h is the same for all processes */
 
     local_n = n/p;  /* So is the number of trapezoids */
@@ -117,13 +115,18 @@ main(int argc, char** argv) {
 
     integral = Trap(local_a, local_b, local_n, h);
 
+    /**********************/
+    /*code changed section*/
+    /**********************/
+
+    dest = p - 1;   /*modify dest to the largest processor*/
 
 /* Add up the integrals calculated by each process */
-/*(changed) */
+/*change my_rank to be the largest rank*/
 if (my_rank == p - 1) {
 
         total = integral;
-
+        /*source is changed*/
         for (source = 0; source < p - 1; source++) {
 
             MPI_Recv(&integral, 1, MPI_FLOAT, source, tag,
@@ -144,7 +147,7 @@ if (my_rank == p - 1) {
 
 
     /* Print the result */
-    /*(changed)*/
+    /*change my_rank to be the largest rank*/
     if (my_rank == p - 1) {
 
         printf("With n = %d trapezoids, our estimate\n",
@@ -223,7 +226,7 @@ void Get_data(
         printf("Enter a, b, and n\n");
 
         scanf("%f %f %d", a_ptr, b_ptr, n_ptr);
-        
+
         for (dest = 1; dest < p ; dest++){
 
             tag = 0;
