@@ -13,9 +13,9 @@ float A[MAXN][MAXN], B[MAXN], X[MAXN];
 /* Initialize A and B (and X to 0.0s) */
 void initialize_inputs() {
     /*generate random number*/
-    int seed = 0;
-    printf("Enter the random seed:\n");
-    scanf("%d", &seed);
+    int seed = 1;
+    //printf("Enter the random seed:\n");
+    //scanf("%d", &seed);
     srand(seed);
 
     int row, col;
@@ -43,7 +43,7 @@ int main(int argc, char** argv){
     int row, col;               /*row number and column number for the matrix*/
     MPI_Status  status;
     double start, end;          /*used to calculate running time*/
-    double time[3];
+    double time[4];
 
     /*Initialize MPI*/
     MPI_Init(&argc, &argv);
@@ -144,35 +144,62 @@ int main(int argc, char** argv){
         printf("Gaussian elimination takes %f s.\n", time[2] - time[1]);
     }
 
-    /*back substitution*/
-    for(i = chunkSize - 1; i >= 0; i--){
-        /*the original row in the Matrix A, B and X*/
-        row = generalChunkSize*rank + i;
-        /*get x initialized*/
-        X[row]=local_B[i];
-        /*broadcast matrix X to all the processors*/
-        MPI_Bcast(&X[row], 1, MPI_FLOAT, rank, MPI_COMM_WORLD);
-    }
+    /*send local_A and local_B from different ranks into rank 0*/
+    if(rank == 0){
+        /*set A and B in processor 0*/
+        for(i = 0; i < chunkSize; i++)
+            for(j = 0; j < MAXN; j++)
+                A[i][j] = local_A[i][j];
 
-    /*for each row, doing back substitution*/
-    for(i = chunkSize - 1; i >= 0; i--){
-        row = generalChunkSize*rank + i;
-        for(k = MAXN - 1; k > row; k--)
-            X[row] -= local_A[i][k]*X[k];
-        X[row] /= local_A[i][i];
+        for(i = 0; i < chunkSize; i++)
+            B[i] = local_B[i];
+
+        /*receive all the data from other processors*/
+        for(i = chunkSize; i < MAXN; i++){
+            MPI_Recv(&A[i], MAXN, MPI_FLOAT, i/chunkSize, i%chunkSize, MPI_COMM_WORLD, &status);
+            MPI_Recv(&B[i], 1, MPI_FLOAT, i/chunkSize, i%chunkSize, MPI_COMM_WORLD, &status);
+        }
+    }
+    else{
+        /*other processors send the data to processor 0, and store it in A and B*/
+        for(i = 0; i < chunkSize; i++){
+            MPI_Send(&local_A[i], MAXN, MPI_FLOAT, 0, i, MPI_COMM_WORLD);
+            MPI_Send(&local_B[i], 1, MPI_FLOAT, 0, i, MPI_COMM_WORLD);
+        }
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-
+    /*running time of gauss elimation*/
     if(rank == 0){
+        time[3] = MPI_Wtime();
+        printf("Gather data from all the processors takes %f s.\n", time[3] - time[2]);
+    }
+
+    /* Back substitution */
+    if(rank == 0){
+        for (i = MAXN - 1; i >= 0; i--) {
+            X[i] = B[i];
+            for (j = MAXN - 1; j > i; j--) {
+                X[i] -= A[i][j] * X[j];
+            }
+            X[i] /= A[i][i];
+        }
+
         /*time end*/
     	end = MPI_Wtime();
     	/*running time of back substitution*/
-    	printf("Back substitution takes %f s.\n", end - time[2]);
+    	printf("Back substitution takes %f s.\n", end - time[3]);
     	/*total runing time*/
         printf("Total Running time of this program is %f s.\n", end - start);
-    }
 
+        FILE *f;
+
+        f = fopen("Vector_X", "w");
+        for(i = 0; i < MAXN; i++){
+            fprintf(f, "%f ", X[i]);
+        }
+        fclose(f);
+    }
 
     MPI_Finalize();
 
