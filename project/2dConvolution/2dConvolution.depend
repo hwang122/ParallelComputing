@@ -1,0 +1,11 @@
+# depslib dependency file v1.0
+1365021060 source:c:\users\kris\documents\github\parallelcomputing\project\2dconvolution\fft.c
+	<assert.h>
+	<math.h>
+
+1366260929 source:c:\users\kris\documents\github\parallelcomputing\project\2dconvolution\main.c
+	<stdio.h>
+	<stdlib.h>
+	<assert.h>
+	<math.h>
+
