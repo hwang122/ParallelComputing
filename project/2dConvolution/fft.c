@@ -14,8 +14,8 @@
 
 #include <assert.h>
 #include <math.h>
+#include "fft.h"
 
-typedef struct {float r; float i;} complex;
 static complex ctmp;
 
 #define C_SWAP(a,b) {ctmp=(a);(a)=(b);(b)=ctmp;}

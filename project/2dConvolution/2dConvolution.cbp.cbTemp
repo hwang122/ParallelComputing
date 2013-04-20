@@ -31,9 +31,21 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
+		<Unit filename="1_im1" />
+		<Unit filename="1_im2" />
+		<Unit filename="2_im1" />
+		<Unit filename="2_im2" />
+		<Unit filename="fft.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="fft.h" />
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="send_recv.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="send_recv.h" />
 		<Extensions>
 			<code_completion />
 			<envvars />
