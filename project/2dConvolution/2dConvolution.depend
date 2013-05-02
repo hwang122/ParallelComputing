@@ -9,3 +9,20 @@
 	<assert.h>
 	<math.h>
 
+1367441606 source:/home/kris/cs546/github/ParallelComputing/project/2dConvolution/fft.c
+	<assert.h>
+	<math.h>
+	"fft.h"
+
+1367444150 /home/kris/cs546/github/ParallelComputing/project/2dConvolution/fft.h
+
+1367445203 source:/home/kris/cs546/github/ParallelComputing/project/2dConvolution/main.c
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<unistd.h>
+	<math.h>
+	"mpi.h"
+	"omp.h"
+	"fft.h"
+

@@ -20,8 +20,8 @@ void readFile(float (*a)[N], float (*b)[N]){
 
     for(i = 0; i < N; i++)
         for(j = 0; j < N; j++){
-            fscanf(f1, "%g", a[i][j]);
-            fscanf(f2, "%g", b[i][j]);
+            fscanf(f1, "%e", &a[i][j]);
+            fscanf(f2, "%e", &b[i][j]);
         }
 
     fclose(f1);
@@ -50,13 +50,15 @@ void read_send(int rank, int p){
     double start, end;
     double time[14];
 
+    /*input data*/
+    float data_1[N][N], data_2[N][N];
+    /*output data*/
+    float output[N][N];
     /*Set the chunk size for each processor*/
     chunkSize = N/p;
 
-    /*These two arrays are used to store the row local data distributed by rank 0*/
-    float rlocal_data1[chunkSize][N], rlocal_data2[chunkSize][N];
-    /*These two arrays are used to store the column local data distributed by rank 0*/
-    float clocal_data1[N][chunkSize], clocal_data2[N][chunkSize];
+    /*These two arrays are used to store the local data distributed by rank 0*/
+    float local_data1[N][N], local_data2[N][N];
     /*local matrix for matrix multiplication*/
     float local_data3[chunkSize][N];
     /*This complex array is used to store the temp row to operate FFT*/
@@ -64,21 +66,17 @@ void read_send(int rank, int p){
 
     /*Initialization of the original Matrix and distribution of data*/
     if(rank == 0){
-        /*input data*/
-        float data_1[N][N], data_2[N][N];
-        /*output data*/
-        float output[N][N];
-
         printf("2D convolution using SPMD model and MPI Send&Receive operations\n");
         start = MPI_Wtime();
+
         /*Read data from the files*/
         readFile(data_1, data_2);
 
         time[0] = MPI_Wtime();
         printf("Read file takes %f s.\n", time[0] - start);
         /*Set data for rank 0*/
-        memmove(rlocal_data1, data_1, sizeof(float)*chunkSize*N);
-        memmove(rlocal_data2, data_2, sizeof(float)*chunkSize*N);
+        memmove(local_data1, data_1, sizeof(float)*chunkSize*N);
+        memmove(local_data2, data_2, sizeof(float)*chunkSize*N);
 
         /*Distribute data using MPI_Send*/
         for(i = 1; i < p; i++){
@@ -90,8 +88,8 @@ void read_send(int rank, int p){
     }
     else{
         /*Receive data using MPI_Recv*/
-        MPI_Recv(rlocal_data1, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
-        MPI_Send(rlocal_data2, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
+        MPI_Recv(local_data1, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
+        MPI_Recv(local_data2, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -105,22 +103,30 @@ void read_send(int rank, int p){
     for(i = 0; i < chunkSize; i++){
         for(j = 0; j < N; j++){
             /*fft each row for im1*/
-            temp_data[j].r = rlocal_data1[i][j];
+            temp_data[j].r = local_data1[i][j];
             temp_data[j].i = 0;
-            c_fft1d(temp_data, N, -1);
-            rlocal_data1[i][j] = temp_data[j].r;
-
-            /*fft each row for im2*/
-            temp_data[j].r = rlocal_data2[i][j];
-            temp_data[j].i = 0;
-            c_fft1d(temp_data, N, -1);
-            rlocal_data2[i][j] = temp_data[j].r;
         }
+
+        c_fft1d(temp_data, N, -1);
+
+        for(j = 0; j < N; j++)
+            local_data1[i][j] = temp_data[j].r;
+
+        for(j = 0; j < N; j++){
+            /*fft each row for im2*/
+            temp_data[j].r = local_data2[i][j];
+            temp_data[j].i = 0;
+        }
+
+        c_fft1d(temp_data, N, -1);
+
+        for(j = 0; j < N; j++)
+            local_data2[i][j] = temp_data[j].r;
     }
     /*Initialize a new vector for distribute column*/
     MPI_Datatype column;
     /*column vector*/
-    MPI_Type_vector(N, 1, N, MPI_FLOAT, &column);
+    MPI_Type_vector(N, chunkSize, N, MPI_FLOAT, &column);
     MPI_Type_commit(&column);
 
     /*gather all the data and distribute in column*/
@@ -128,8 +134,8 @@ void read_send(int rank, int p){
         time[2] = MPI_Wtime();
         printf("FFT each row for input im1 and im2 takes %f s.\n", time[2] - time[1]);
         /*gather all the message to rank 0*/
-        memmove(data_1, rlocal_data1, sizeof(float)*N*chunkSize);
-        memmove(data_2, rlocal_data2, sizeof(float)*N*chunkSize);
+        memmove(data_1, local_data1, sizeof(float)*N*chunkSize);
+        memmove(data_2, local_data2, sizeof(float)*N*chunkSize);
 
         for(i = 1; i < p; i++){
             MPI_Recv(&data_1[i*chunkSize], N*chunkSize, MPI_FLOAT,
@@ -144,26 +150,26 @@ void read_send(int rank, int p){
         /*distribute data in column*/
         for(i = 0; i < N; i++)
             for(j = 0; j < chunkSize; j++){
-                clocal_data1[i][j] = data_1[i][j];
-                clocal_data2[i][j] = data_2[i][j];
+                local_data1[i][j] = data_1[i][j];
+                local_data2[i][j] = data_2[i][j];
             }
 
         /*Using new vector to send data*/
         for(i = 1; i < p; i++){
-            MPI_Send(&data_1[0][i*chunkSize], chunkSize, column,
+            MPI_Send(&data_1[0][i*chunkSize], 1, column,
                      i, 0, MPI_COMM_WORLD);
-            MPI_Send(&data_2[0][i*chunkSize], chunkSize, column,
+            MPI_Send(&data_2[0][i*chunkSize], 1, column,
                      i, 0, MPI_COMM_WORLD);
         }
     }
     else{
         /*send rows have been FFT to rank 0*/
-        MPI_Send(rlocal_data1, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-        MPI_Send(rlocal_data1, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(local_data1, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(local_data2, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
 
         /*receive data according to new vector column*/
-        MPI_Recv(clocal_data1, chunkSize, column, 0, 0, MPI_COMM_WORLD, &status);
-        MPI_Recv(clocal_data2, chunkSize, column, 0, 0, MPI_COMM_WORLD, &status);
+        MPI_Recv(local_data1, 1, column, 0, 0, MPI_COMM_WORLD, &status);
+        MPI_Recv(local_data2, 1, column, 0, 0, MPI_COMM_WORLD, &status);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -172,22 +178,32 @@ void read_send(int rank, int p){
         time[4] = MPI_Wtime();
         printf("Send data(column) to each processor takes %f s.\n", time[4] - time[3]);
     }
+
     /*column FFT*/
     for(i = 0; i < chunkSize; i++){
         for(j = 0; j < N; j++){
             /*fft each column for im1*/
-            temp_data[j].r = clocal_data1[j][i];
+            temp_data[j].r = local_data1[j][i];
             temp_data[j].i = 0;
-            c_fft1d(temp_data, N, -1);
-            clocal_data1[j][i] = temp_data[j].r;
-
-            /*fft each column for im2*/
-            temp_data[j].r = clocal_data2[j][i];
-            temp_data[j].i = 0;
-            c_fft1d(temp_data, N, -1);
-            clocal_data2[j][i] = temp_data[j].r;
         }
+
+        c_fft1d(temp_data, N, -1);
+
+        for(j = 0; j < N; j++)
+            local_data1[j][i] = temp_data[j].r;
+
+        for(j = 0; j < N; j++){
+            /*fft each column for im2*/
+            temp_data[j].r = local_data2[j][i];
+            temp_data[j].i = 0;
+        }
+
+        c_fft1d(temp_data, N, -1);
+
+        for(j = 0; j < N; j++)
+            local_data2[j][i] = temp_data[j].r;
     }
+
     /*Gather all the columns from each rank*/
     if(rank == 0){
         time[5] = MPI_Wtime();
@@ -196,22 +212,22 @@ void read_send(int rank, int p){
         /*get data from rank 0*/
         for(i = 0; i < N; i++)
             for(j = 0; j < chunkSize; j++){
-                data_1[i][j] = clocal_data1[i][j];
-                data_2[i][j] = clocal_data2[i][j];
+                data_1[i][j] = local_data1[i][j];
+                data_2[i][j] = local_data2[i][j];
             }
 
         /*get data from other ranks*/
         for(i = 1; i < p; i++){
-            MPI_Recv(&data_1[0][i*chunkSize], chunkSize, column,
+            MPI_Recv(&data_1[0][i*chunkSize], 1, column,
                      i, 0, MPI_COMM_WORLD, &status);
-            MPI_Recv(&data_2[0][i*chunkSize], chunkSize, column,
+            MPI_Recv(&data_2[0][i*chunkSize], 1, column,
                      i, 0, MPI_COMM_WORLD, &status);
         }
     }
     /*Send columns into rank 0*/
     else{
-        MPI_Send(clocal_data1, chunkSize, column, 0, 0, MPI_COMM_WORLD);
-        MPI_Send(clocal_data2, chunkSize, column, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(local_data1, 1, column, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(local_data2, 1, column, 0, 0, MPI_COMM_WORLD);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -223,18 +239,18 @@ void read_send(int rank, int p){
 
         /*matrix multipication*/
         /*set local data for rank 0*/
-        memmove(rlocal_data1, data_1, sizeof(float)*chunkSize*N);
+        memmove(local_data1, data_1, sizeof(float)*chunkSize*N);
 
         /*Send data1 by row to each rank*/
         for(i = 1; i < p; i++)
             MPI_Send(&data_1[i*chunkSize], N*chunkSize, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
-        /*Broadcast data2 to all the ranks*/
-        MPI_Bcast(data_2, N*N, MPI_FLOAT, 0, MPI_COMM_WORLD);
     }
     else{
         /*receive data1 from rank 0*/
-        MPI_Recv(rlocal_data1, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
+        MPI_Recv(local_data1, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
     }
+    /*Broadcast data2 to all the ranks*/
+    MPI_Bcast(data_2, N*N, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
     MPI_Barrier(MPI_COMM_WORLD);
     if(rank == 0){
@@ -246,7 +262,7 @@ void read_send(int rank, int p){
     for(i = 0; i < chunkSize; i++)
         for(j = 0; j < N; j++)
             for(k = 0; k < N; k++)
-                local_data3[i][j] += rlocal_data1[i][k]*data_2[k][j];
+                local_data3[i][j] += local_data1[i][k]*data_2[k][j];
 
     /*collect multiplication result from each rank*/
     if(rank == 0){
@@ -260,9 +276,12 @@ void read_send(int rank, int p){
             /*fft each row for im1*/
             temp_data[j].r = local_data3[i][j];
             temp_data[j].i = 0;
-            c_fft1d(temp_data, N, 1);
-            local_data3[i][j] = temp_data[j].r;
         }
+
+        c_fft1d(temp_data, N, 1);
+
+        for(j = 0; j < N; j++)
+            local_data3[i][j] = temp_data[j].r;
     }
 
     if(rank == 0){
@@ -281,17 +300,17 @@ void read_send(int rank, int p){
         /*distribute output file in column*/
         for(i = 0; i < N; i++)
             for(j = 0; j < chunkSize; j++)
-                clocal_data1[i][j] = output[i][j];
+                local_data1[i][j] = output[i][j];
 
         /*Using new vector to send output file*/
         for(i = 1; i < p; i++)
-            MPI_Send(&output[0][i*chunkSize], chunkSize, column, i, 0, MPI_COMM_WORLD);
+            MPI_Send(&output[0][i*chunkSize], 1, column, i, 0, MPI_COMM_WORLD);
     }
     else{
         MPI_Send(local_data3, N*chunkSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
 
         /*receive data according to new vector column*/
-        MPI_Recv(clocal_data1, chunkSize, column, 0, 0, MPI_COMM_WORLD, &status);
+        MPI_Recv(local_data1, 1, column, 0, 0, MPI_COMM_WORLD, &status);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -304,11 +323,14 @@ void read_send(int rank, int p){
     for(i = 0; i < chunkSize; i++){
         for(j = 0; j < N; j++){
             /*fft each column for im1*/
-            temp_data[j].r = clocal_data1[j][i];
+            temp_data[j].r = local_data1[j][i];
             temp_data[j].i = 0;
-            c_fft1d(temp_data, N, 1);
-            clocal_data1[j][i] = temp_data[j].r;
         }
+
+        c_fft1d(temp_data, N, 1);
+
+        for(j = 0; j < N; j++)
+            local_data1[j][i] = temp_data[j].r;
     }
 
     /*Gather all the columns of output file from each rank*/
@@ -317,11 +339,11 @@ void read_send(int rank, int p){
         printf("Inverse-2DFFT out_1(column) takes %f s.\n", time[12] - time[11]);
 
         for(i = 1; i < p; i++)
-            MPI_Recv(&output[0][i*chunkSize], chunkSize, column, i, 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(&output[0][i*chunkSize], 1, column, i, 0, MPI_COMM_WORLD, &status);
     }
     /*Send columns into rank 0*/
     else{
-        MPI_Send(clocal_data1, chunkSize, column, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(local_data1, 1, column, 0, 0, MPI_COMM_WORLD);
     }
 
     if(rank == 0){
@@ -333,7 +355,7 @@ void read_send(int rank, int p){
         end = MPI_Wtime();
         printf("Write output file to file takes %f s.\n", end - time[13]);
 
-        printf("Total running time of 2D convolution using MPI_Send&MPI_Recv takes %f", end - start);
+        printf("Total running time of 2D convolution using MPI_Send&MPI_Recv takes %f s.\n", end - start);
     }
 
     /*free vector column*/
@@ -343,17 +365,18 @@ void read_send(int rank, int p){
 void collective(int rank, int p){
     int i, j, k;
     int chunkSize;
-    MPI_Status status;
     double start, end;
     double time[14];
 
+    /*input data*/
+    float data_1[N][N], data_2[N][N];
+    /*output data*/
+    float output[N][N];
     /*Set the chunk size for each processor*/
     chunkSize = N/p;
 
-    /*These two arrays are used to store the row local data distributed by rank 0*/
-    float rlocal_data1[chunkSize][N], rlocal_data2[chunkSize][N];
-    /*These two arrays are used to store the column local data distributed by rank 0*/
-    float clocal_data1[N][chunkSize], clocal_data2[N][chunkSize];
+    /*These two arrays are used to store the local data distributed by rank 0*/
+    float local_data1[N][N], local_data2[N][N];
     /*local matrix for matrix multiplication*/
     float local_data3[chunkSize][N];
     /*This complex array is used to store the temp row to operate FFT*/
@@ -361,11 +384,6 @@ void collective(int rank, int p){
 
     /*Initialization of the original Matrix and distribution of data*/
     if(rank == 0){
-        /*input data*/
-        float data_1[N][N], data_2[N][N];
-        /*output data*/
-        float output[N][N];
-
         printf("2D convolution using SPMD model and MPI Collective operations\n");
         start = MPI_Wtime();
         /*Read data from the files*/
@@ -377,10 +395,10 @@ void collective(int rank, int p){
 
     /*scatter all the data to local data*/
     MPI_Scatter(data_1, chunkSize*N, MPI_FLOAT,
-                rlocal_data1, chunkSize*N, MPI_FLOAT,
+                local_data1, chunkSize*N, MPI_FLOAT,
                 0, MPI_COMM_WORLD);
     MPI_Scatter(data_2, chunkSize*N, MPI_FLOAT,
-                rlocal_data2, chunkSize*N, MPI_FLOAT,
+                local_data2, chunkSize*N, MPI_FLOAT,
                 0, MPI_COMM_WORLD);
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -394,17 +412,25 @@ void collective(int rank, int p){
     for(i = 0; i < chunkSize; i++){
         for(j = 0; j < N; j++){
             /*fft each row for im1*/
-            temp_data[j].r = rlocal_data1[i][j];
+            temp_data[j].r = local_data1[i][j];
             temp_data[j].i = 0;
-            c_fft1d(temp_data, N, -1);
-            rlocal_data1[i][j] = temp_data[j].r;
-
-            /*fft each row for im2*/
-            temp_data[j].r = rlocal_data2[i][j];
-            temp_data[j].i = 0;
-            c_fft1d(temp_data, N, -1);
-            rlocal_data2[i][j] = temp_data[j].r;
         }
+
+        c_fft1d(temp_data, N, -1);
+
+        for(j = 0; j < N; j++)
+            local_data1[i][j] = temp_data[j].r;
+
+        for(j = 0; j < N; j++){
+            /*fft each row for im2*/
+            temp_data[j].r = local_data2[i][j];
+            temp_data[j].i = 0;
+        }
+
+        c_fft1d(temp_data, N, -1);
+
+        for(j = 0; j < N; j++)
+            local_data2[i][j] = temp_data[j].r;
     }
 
     /*gather all the data and distribute in column*/
@@ -413,10 +439,10 @@ void collective(int rank, int p){
         printf("FFT each row for input im1 and im2 takes %f s.\n", time[2] - time[1]);
     }
 
-    MPI_Gather(rlocal_data1, chunkSize*N, MPI_FLOAT,
+    MPI_Gather(local_data1, chunkSize*N, MPI_FLOAT,
                data_1, chunkSize*N, MPI_FLOAT,
                0, MPI_COMM_WORLD);
-    MPI_Gather(rlocal_data2, chunkSize*N, MPI_FLOAT,
+    MPI_Gather(local_data2, chunkSize*N, MPI_FLOAT,
                data_2, chunkSize*N, MPI_FLOAT,
                0, MPI_COMM_WORLD);
 
@@ -426,17 +452,19 @@ void collective(int rank, int p){
     }
 
     /*Initialize a new vector for distribute column*/
-    MPI_Datatype column;
+    MPI_Datatype column, col;
     /*column vector*/
-    MPI_Type_vector(N, 1, N, MPI_FLOAT, &column);
+    MPI_Type_vector(N, 1, N, MPI_FLOAT, &col);
+    MPI_Type_commit(&col);
+    MPI_Type_create_resized(col, 0, 1*sizeof(float), &column);
     MPI_Type_commit(&column);
 
     /*scatter all the data to column local data*/
     MPI_Scatter(data_1, chunkSize, column,
-                clocal_data1, chunkSize, column,
+                local_data1, chunkSize, column,
                 0, MPI_COMM_WORLD);
     MPI_Scatter(data_2, chunkSize, column,
-                clocal_data2, chunkSize, column,
+                local_data2, chunkSize, column,
                 0, MPI_COMM_WORLD);
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -448,17 +476,25 @@ void collective(int rank, int p){
     for(i = 0; i < chunkSize; i++){
         for(j = 0; j < N; j++){
             /*fft each column for im1*/
-            temp_data[j].r = clocal_data1[j][i];
+            temp_data[j].r = local_data1[j][i];
             temp_data[j].i = 0;
-            c_fft1d(temp_data, N, -1);
-            clocal_data1[j][i] = temp_data[j].r;
-
-            /*fft each column for im2*/
-            temp_data[j].r = clocal_data2[j][i];
-            temp_data[j].i = 0;
-            c_fft1d(temp_data, N, -1);
-            clocal_data2[j][i] = temp_data[j].r;
         }
+
+        c_fft1d(temp_data, N, -1);
+
+        for(j = 0; j < N; j++)
+            local_data1[j][i] = temp_data[j].r;
+
+        for(j = 0; j < N; j++){
+            /*fft each column for im2*/
+            temp_data[j].r = local_data2[j][i];
+            temp_data[j].i = 0;
+        }
+
+        c_fft1d(temp_data, N, -1);
+
+        for(j = 0; j < N; j++)
+            local_data2[j][i] = temp_data[j].r;
     }
     /*Gather all the columns from each rank*/
     if(rank == 0){
@@ -466,10 +502,10 @@ void collective(int rank, int p){
         printf("FFT each column for input im1 and im2 takes %f s.\n", time[5] - time[4]);
     }
 
-    MPI_Gather(clocal_data1, chunkSize, column,
+    MPI_Gather(local_data1, chunkSize, column,
                data_1, chunkSize, column,
                0, MPI_COMM_WORLD);
-    MPI_Gather(clocal_data2, chunkSize, column,
+    MPI_Gather(local_data2, chunkSize, column,
                data_2, chunkSize, column,
                0, MPI_COMM_WORLD);
 
@@ -482,7 +518,7 @@ void collective(int rank, int p){
     }
 
     MPI_Scatter(data_1, chunkSize*N, MPI_FLOAT,
-                rlocal_data1, chunkSize*N, MPI_FLOAT,
+                local_data1, chunkSize*N, MPI_FLOAT,
                 0, MPI_COMM_WORLD);
     /*Broadcast data2 to all the ranks*/
     MPI_Bcast(data_2, N*N, MPI_FLOAT, 0, MPI_COMM_WORLD);
@@ -511,9 +547,12 @@ void collective(int rank, int p){
             /*fft each row for im1*/
             temp_data[j].r = local_data3[i][j];
             temp_data[j].i = 0;
-            c_fft1d(temp_data, N, 1);
-            local_data3[i][j] = temp_data[j].r;
         }
+
+        c_fft1d(temp_data, N, 1);
+
+        for(j = 0; j < N; j++)
+            local_data3[i][j] = temp_data[j].r;
     }
 
     if(rank == 0){
@@ -533,7 +572,7 @@ void collective(int rank, int p){
     }
 
     MPI_Scatter(output, chunkSize, column,
-                clocal_data1, chunkSize, column,
+                local_data1, chunkSize, column,
                 0, MPI_COMM_WORLD);
 
     if(rank == 0){
@@ -545,11 +584,14 @@ void collective(int rank, int p){
     for(i = 0; i < chunkSize; i++){
         for(j = 0; j < N; j++){
             /*fft each column for im1*/
-            temp_data[j].r = clocal_data1[j][i];
+            temp_data[j].r = local_data1[j][i];
             temp_data[j].i = 0;
-            c_fft1d(temp_data, N, 1);
-            clocal_data1[j][i] = temp_data[j].r;
         }
+
+        c_fft1d(temp_data, N, 1);
+
+        for(j = 0; j < N; j++)
+            local_data1[j][i] = temp_data[j].r;
     }
 
     /*Gather all the columns of output file from each rank*/
@@ -558,7 +600,7 @@ void collective(int rank, int p){
         printf("Inverse-2DFFT out_1(column) takes %f s.\n", time[12] - time[11]);
     }
 
-    MPI_Gather(clocal_data1, chunkSize, column,
+    MPI_Gather(local_data1, chunkSize, column,
                output, chunkSize, column,
                0, MPI_COMM_WORLD);
 
@@ -571,14 +613,14 @@ void collective(int rank, int p){
         end = MPI_Wtime();
         printf("Write output file to file takes %f s.\n", end - time[13]);
 
-        printf("Total running time of 2D convolution using MPI_Scatter&MPI_Gather takes %f", end - start);
+        printf("Total running time of 2D convolution using MPI_Scatter&MPI_Gather takes %f s\n", end - start);
     }
 
     /*free vector column*/
     MPI_Type_free(&column);
 }
 
-int main(int argc, char **argv))
+int main(int argc, char **argv)
 {
     int rank;
     int p;
