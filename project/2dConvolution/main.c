@@ -20,8 +20,8 @@ void readFile(float (*a)[N], float (*b)[N]){
 
     for(i = 0; i < N; i++)
         for(j = 0; j < N; j++){
-            fscanf(f1, "%e", &a[i][j]);
-            fscanf(f2, "%e", &b[i][j]);
+            fscanf(f1, "%g", &a[i][j]);
+            fscanf(f2, "%g", &b[i][j]);
         }
 
     fclose(f1);
@@ -619,6 +619,7 @@ void collective(int rank, int p){
     /*free vector column*/
     MPI_Type_free(&column);
 }
+
 
 int main(int argc, char **argv)
 {

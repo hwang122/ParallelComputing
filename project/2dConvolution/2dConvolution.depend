@@ -26,3 +26,20 @@
 	"omp.h"
 	"fft.h"
 
+1367473926 source:/home/kris/cs546/github/ParallelComputing/project/2dConvolution/wr_file.c
+	<stdio.h>
+	<stdlib.h>
+	<unistd.h>
+	"wr_file.h"
+
+1367480325 /home/kris/cs546/github/ParallelComputing/project/2dConvolution/wr_file.h
+
+1367481104 source:/home/kris/cs546/github/ParallelComputing/project/2dConvolution/communicator.c
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<unistd.h>
+	"mpi.h"
+	"fft.h"
+	"wr_file.h"
+
