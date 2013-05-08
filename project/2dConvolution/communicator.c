@@ -308,9 +308,11 @@ int main(int argc, char **argv)
 
         /*Matrix multiplication*/
         for(i = 0; i < chunkSize; i++)
-            for(j = 0; j < N; j++)
+            for(j = 0; j < N; j++){
+                local_data2[i][j] = 0;
                 for(k = 0; k < N; k++)
                     local_data2[i][j] += local_data[i][k]*data_2[k][j];
+            }
 
         /*collect multiplication result from each rank*/
         if(task_rank == 0){
